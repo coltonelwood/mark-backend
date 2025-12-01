@@ -222,7 +222,8 @@ async function startServer() {
     console.log('✅ Database connected');
 
     // Start server
-    app.listen(config.port, () => {
+const PORT = process.env.PORT || config.port;
+app.listen(PORT, () => {
       console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
