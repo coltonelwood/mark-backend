@@ -61,16 +61,18 @@ export function validatePasswordStrength(password: string): { valid: boolean; er
  * Generate JWT access token
  */
 export function generateAccessToken(payload: JwtPayload): string {
-  return jwt.sign(payload, config.jwt.secret, {
+  // Cast jwt to any so TS stops complaining about overloads
+  return (jwt as any).sign(payload, config.jwt.secret, {
     expiresIn: config.jwt.expiresIn,
   });
 }
+
 
 /**
  * Generate JWT refresh token
  */
 export function generateRefreshToken(payload: JwtPayload): string {
-  return jwt.sign(payload, config.jwt.refreshSecret, {
+  return (jwt as any).sign(payload, config.jwt.refreshSecret, {
     expiresIn: config.jwt.refreshExpiresIn,
   });
 }

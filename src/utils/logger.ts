@@ -22,7 +22,7 @@ class LoggingService {
           category: input.category,
           action: input.action,
           message: input.message,
-          metadata: input.metadata || undefined,
+          metadata: (input.metadata ?? undefined) as any,
           userId: input.userId,
           ipAddress: input.ipAddress,
           userAgent: input.userAgent,
