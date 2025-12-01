@@ -361,7 +361,7 @@ class TrustScoreService {
       lastUpdated: new Date(),
       history: history.map((h) => ({
         date: h.createdAt,
-        score: totalScore, // We'd need historical scores for this
+        score: totalScore, // Would need historical scores for past values
         eventType: h.eventType,
         points: h.points,
         reason: h.reason,
@@ -505,7 +505,8 @@ class TrustScoreService {
         points,
         reason,
         triggeredBy,
-        metadata: metadata || undefined,
+        // key fix here:
+        metadata: (metadata ?? undefined) as any,
       },
     });
 
