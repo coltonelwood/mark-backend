@@ -1,0 +1,771 @@
+// =============================================================================
+// MARK BACKEND - PRISMA SCHEMA
+// =============================================================================
+// The Safe Market - Web3 platform for safe crypto launches and tokenized business raises
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ProjectStatus {
+  DRAFT
+  PENDING_REVIEW
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  LIVE
+  PAUSED
+  COMPLETED
+}
+
+enum BusinessStatus {
+  DRAFT
+  PENDING_REVIEW
+  IN_REVIEW
+  KYB_PENDING
+  KYB_VERIFIED
+  APPROVED
+  REJECTED
+  LIVE
+  PAUSED
+}
+
+enum KYBLevel {
+  NONE
+  BASIC
+  STANDARD
+  ENHANCED
+}
+
+enum IdentityStatus {
+  NOT_STARTED
+  PENDING
+  IN_REVIEW
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum MessageStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum ApplicationStatus {
+  NEW
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  WAITLISTED
+}
+
+enum ApplicationType {
+  CRYPTO_LAUNCH
+  BUSINESS_RAISE
+  PARTNERSHIP
+  OTHER
+}
+
+enum TrustScoreEventType {
+  IDENTITY_VERIFIED
+  LIQUIDITY_LOCKED
+  VESTING_CONFIGURED
+  PROFILE_COMPLETED
+  AUDIT_SUBMITTED
+  DOCS_UPLOADED
+  KYB_VERIFIED
+  MANUAL_ADJUSTMENT
+  PENALTY_APPLIED
+  BONUS_APPLIED
+}
+
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+  SECURITY
+  AUDIT
+}
+
+enum LogCategory {
+  AUTH
+  PROJECT
+  BUSINESS
+  ADMIN
+  TRUST_SCORE
+  SECURITY
+  SYSTEM
+  DEX
+  IDENTITY
+}
+
+enum TokenType {
+  UTILITY
+  GOVERNANCE
+  EQUITY
+  REVENUE_SHARE
+  MEMBERSHIP
+}
+
+enum VestingType {
+  LINEAR
+  CLIFF_LINEAR
+  MILESTONE
+  CUSTOM
+}
+
+// =============================================================================
+// USER & AUTHENTICATION
+// =============================================================================
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  passwordHash      String
+  walletAddress     String?   @unique
+  role              UserRole  @default(USER)
+  isActive          Boolean   @default(true)
+  isEmailVerified   Boolean   @default(false)
+  emailVerifiedAt   DateTime?
+  lastLoginAt       DateTime?
+  lastLoginIp       String?
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime?
+  twoFactorEnabled  Boolean   @default(false)
+  twoFactorSecret   String?
+  
+  // Profile
+  displayName       String?
+  avatarUrl         String?
+  bio               String?
+  
+  // Rate limiting
+  apiCallCount      Int       @default(0)
+  apiCallResetAt    DateTime?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  cryptoProjects    CryptoProject[]
+  businesses        Business[]
+  identityVerification PrivateIdentityVerification?
+  sessions          Session[]
+  systemLogs        SystemLog[]
+  trustScoreEvents  TrustScoreEvent[]
+  contactMessages   ContactMessage[]
+  applications      LaunchApplication[]
+  adminNotes        AdminNote[]        @relation("AdminAuthor")
+  
+  @@index([email])
+  @@index([walletAddress])
+  @@index([role])
+}
+
+model Session {
+  id            String   @id @default(cuid())
+  userId        String
+  token         String   @unique
+  refreshToken  String?  @unique
+  ipAddress     String?
+  userAgent     String?
+  expiresAt     DateTime
+  isRevoked     Boolean  @default(false)
+  revokedAt     DateTime?
+  revokedReason String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+// =============================================================================
+// CRYPTO PROJECTS
+// =============================================================================
+
+model CryptoProject {
+  id                    String        @id @default(cuid())
+  userId                String
+  
+  // Basic Info
+  name                  String
+  symbol                String?
+  description           String?
+  category              String?       // DeFi, NFT, Gaming, etc.
+  website               String?
+  whitepaper            String?
+  
+  // Social Links
+  twitter               String?
+  discord               String?
+  telegram              String?
+  github                String?
+  
+  // Token Details
+  tokenType             TokenType     @default(UTILITY)
+  totalSupply           String?       // BigInt as string
+  decimals              Int           @default(18)
+  
+  // Team Allocation
+  teamAllocationPercent Float?
+  teamVestingMonths     Int?
+  teamCliffMonths       Int?
+  vestingType           VestingType?
+  
+  // Liquidity
+  initialLiquidity      String?       // USD value
+  liquidityLockMonths   Int?
+  liquidityLockTxHash   String?
+  
+  // Audit & Security
+  auditProvider         String?
+  auditReportUrl        String?
+  auditDate             DateTime?
+  contractAddress       String?
+  contractVerified      Boolean       @default(false)
+  
+  // Status & Review
+  status                ProjectStatus @default(DRAFT)
+  submittedAt           DateTime?
+  reviewedAt            DateTime?
+  reviewedBy            String?
+  rejectionReason       String?
+  
+  // Trust Score
+  trustScore            Int           @default(50)
+  trustScoreUpdatedAt   DateTime?
+  
+  // Launch Details
+  launchDate            DateTime?
+  softCap               String?
+  hardCap               String?
+  minContribution       String?
+  maxContribution       String?
+  
+  // Flags
+  isVerified            Boolean       @default(false)
+  isFeatured            Boolean       @default(false)
+  isPaused              Boolean       @default(false)
+  
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  
+  // Relations
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trustScoreEvents      TrustScoreEvent[]
+  adminNotes            AdminNote[]
+  documents             ProjectDocument[]
+  
+  @@index([userId])
+  @@index([status])
+  @@index([trustScore])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model ProjectDocument {
+  id              String        @id @default(cuid())
+  projectId       String
+  
+  name            String
+  type            String        // whitepaper, audit, legal, tokenomics
+  fileUrl         String
+  fileHash        String?       // SHA256 for integrity
+  fileSize        Int?
+  mimeType        String?
+  
+  isPublic        Boolean       @default(false)
+  uploadedAt      DateTime      @default(now())
+  
+  project         CryptoProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@index([projectId])
+  @@index([type])
+}
+
+// =============================================================================
+// BUSINESSES
+// =============================================================================
+
+model Business {
+  id                    String         @id @default(cuid())
+  userId                String
+  
+  // Legal Info
+  legalName             String
+  dba                   String?        // Doing Business As
+  entityType            String?        // LLC, C-Corp, S-Corp, etc.
+  jurisdiction          String?        // State/Country
+  ein                   String?        // Encrypted reference
+  registrationNumber    String?
+  incorporationDate     DateTime?
+  
+  // Address
+  address               String?
+  city                  String?
+  state                 String?
+  postalCode            String?
+  country               String?
+  
+  // Contact
+  businessEmail         String?
+  businessPhone         String?
+  website               String?
+  
+  // Description
+  description           String?
+  industry              String?
+  employeeCount         Int?
+  annualRevenue         String?
+  
+  // Social
+  linkedin              String?
+  twitter               String?
+  
+  // KYB
+  kybLevel              KYBLevel       @default(NONE)
+  kybProvider           String?
+  kybVerifiedAt         DateTime?
+  kybExpiresAt          DateTime?
+  kybRejectionReason    String?
+  
+  // Tokenization Details
+  tokenType             TokenType?
+  raiseAmount           String?
+  equityPercent         Float?
+  revenueSharePercent   Float?
+  minInvestment         String?
+  maxInvestment         String?
+  
+  // Status
+  status                BusinessStatus @default(DRAFT)
+  submittedAt           DateTime?
+  reviewedAt            DateTime?
+  reviewedBy            String?
+  rejectionReason       String?
+  
+  // Trust Score
+  trustScore            Int            @default(50)
+  trustScoreUpdatedAt   DateTime?
+  
+  // Flags
+  isVerified            Boolean        @default(false)
+  isFeatured            Boolean        @default(false)
+  isPaused              Boolean        @default(false)
+  
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  
+  // Relations
+  user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  founders              BusinessFounder[]
+  documents             BusinessDocument[]
+  trustScoreEvents      TrustScoreEvent[]
+  adminNotes            AdminNote[]
+  revenueReports        RevenueReport[]
+  
+  @@index([userId])
+  @@index([status])
+  @@index([kybLevel])
+  @@index([trustScore])
+  @@index([industry])
+}
+
+model BusinessFounder {
+  id                String    @id @default(cuid())
+  businessId        String
+  
+  name              String
+  role              String    // CEO, CTO, etc.
+  email             String?
+  ownershipPercent  Float?
+  walletAddress     String?
+  linkedinUrl       String?
+  kycVerified       Boolean   @default(false)
+  kycVerifiedAt     DateTime?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  @@index([businessId])
+}
+
+model BusinessDocument {
+  id              String    @id @default(cuid())
+  businessId      String
+  
+  name            String
+  type            String    // formation, financial, legal, kyb, audit
+  fileUrl         String
+  fileHash        String?
+  fileSize        Int?
+  mimeType        String?
+  
+  isPublic        Boolean   @default(false)
+  isVerified      Boolean   @default(false)
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  
+  uploadedAt      DateTime  @default(now())
+  
+  business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  @@index([businessId])
+  @@index([type])
+}
+
+model RevenueReport {
+  id                  String    @id @default(cuid())
+  businessId          String
+  
+  period              String    // 2024-Q1, 2024-01, etc.
+  periodStart         DateTime
+  periodEnd           DateTime
+  
+  grossRevenue        String    // BigInt as string
+  eligibleRevenue     String?
+  distributionAmount  String?
+  
+  documentUrl         String?
+  documentHash        String?
+  
+  isVerified          Boolean   @default(false)
+  verifiedBy          String?
+  verifiedAt          DateTime?
+  
+  submittedAt         DateTime  @default(now())
+  
+  business            Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  @@unique([businessId, period])
+  @@index([businessId])
+  @@index([period])
+}
+
+// =============================================================================
+// IDENTITY VERIFICATION
+// =============================================================================
+
+model PrivateIdentityVerification {
+  id                String          @id @default(cuid())
+  userId            String          @unique
+  
+  // Status
+  status            IdentityStatus  @default(NOT_STARTED)
+  level             String?         // basic, standard, verified
+  
+  // Provider Info (we only store metadata, not PII)
+  provider          String?         // e.g., "persona", "jumio"
+  providerSessionId String?
+  providerStatus    String?
+  
+  // Verification Results (metadata only)
+  verifiedAt        DateTime?
+  expiresAt         DateTime?
+  rejectionReason   String?
+  retryCount        Int             @default(0)
+  lastAttemptAt     DateTime?
+  
+  // Flags
+  isAccredited      Boolean         @default(false)  // For securities compliance
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([status])
+  @@index([provider])
+}
+
+// =============================================================================
+// CONTACT & APPLICATIONS
+// =============================================================================
+
+model ContactMessage {
+  id              String        @id @default(cuid())
+  userId          String?
+  
+  name            String
+  email           String
+  subject         String?
+  message         String
+  category        String?       // support, partnership, press, other
+  
+  status          MessageStatus @default(NEW)
+  assignedTo      String?
+  responseText    String?
+  respondedAt     DateTime?
+  
+  // Metadata
+  ipAddress       String?
+  userAgent       String?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  adminNotes      AdminNote[]
+  
+  @@index([status])
+  @@index([email])
+  @@index([createdAt])
+}
+
+model LaunchApplication {
+  id                String            @id @default(cuid())
+  userId            String?
+  
+  // Applicant Info
+  applicantName     String
+  applicantEmail    String
+  applicantRole     String?
+  companyName       String?
+  website           String?
+  
+  // Application Details
+  type              ApplicationType
+  description       String
+  raiseAmount       String?
+  timeline          String?
+  
+  // Additional Info
+  twitter           String?
+  discord           String?
+  telegram          String?
+  referralSource    String?
+  
+  // Status
+  status            ApplicationStatus @default(NEW)
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  rejectionReason   String?
+  
+  // Metadata
+  ipAddress         String?
+  userAgent         String?
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  user              User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  adminNotes        AdminNote[]
+  
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// TRUST SCORE
+// =============================================================================
+
+model TrustScoreEvent {
+  id              String              @id @default(cuid())
+  
+  // Entity reference (one of these will be set)
+  projectId       String?
+  businessId      String?
+  userId          String?
+  
+  // Event Details
+  eventType       TrustScoreEventType
+  points          Int                 // Can be positive or negative
+  reason          String
+  metadata        Json?               // Additional context
+  
+  // Audit
+  triggeredBy     String?             // system, admin userId, etc.
+  
+  createdAt       DateTime            @default(now())
+  
+  // Relations
+  project         CryptoProject?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  business        Business?           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user            User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([projectId])
+  @@index([businessId])
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// ADMIN & SYSTEM
+// =============================================================================
+
+model AdminNote {
+  id              String          @id @default(cuid())
+  authorId        String
+  
+  // Entity reference (one of these will be set)
+  projectId       String?
+  businessId      String?
+  contactId       String?
+  applicationId   String?
+  
+  note            String
+  isInternal      Boolean         @default(true)
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relations
+  author          User            @relation("AdminAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  project         CryptoProject?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  business        Business?       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  contact         ContactMessage? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  application     LaunchApplication? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  
+  @@index([authorId])
+  @@index([projectId])
+  @@index([businessId])
+  @@index([contactId])
+  @@index([applicationId])
+}
+
+model SystemLog {
+  id              String        @id @default(cuid())
+  
+  level           LogLevel
+  category        LogCategory
+  action          String
+  message         String
+  metadata        Json?
+  
+  // Actor
+  userId          String?
+  ipAddress       String?
+  userAgent       String?
+  
+  // Request context
+  requestId       String?
+  endpoint        String?
+  method          String?
+  statusCode      Int?
+  responseTime    Int?          // milliseconds
+  
+  createdAt       DateTime      @default(now())
+  
+  user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([level])
+  @@index([category])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+// =============================================================================
+// DEX (PLACEHOLDER FOR FUTURE)
+// =============================================================================
+
+model DexPair {
+  id              String    @id @default(cuid())
+  
+  tokenA          String
+  tokenB          String
+  poolAddress     String?
+  
+  reserveA        String?   // BigInt as string
+  reserveB        String?
+  
+  fee             Float     @default(0.003)  // 0.3%
+  isActive        Boolean   @default(true)
+  
+  // Safety features
+  isRegulated     Boolean   @default(false)  // Requires KYC
+  warmupEndsAt    DateTime? // Anti-sniper warmup
+  maxSlippage     Float     @default(0.05)   // 5% default max slippage
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@unique([tokenA, tokenB])
+  @@index([isActive])
+}
+
+// =============================================================================
+// RATE LIMITING & SECURITY
+// =============================================================================
+
+model RateLimitRecord {
+  id              String    @id @default(cuid())
+  
+  identifier      String    // IP address or user ID
+  endpoint        String
+  windowStart     DateTime
+  requestCount    Int       @default(1)
+  
+  createdAt       DateTime  @default(now())
+  
+  @@unique([identifier, endpoint, windowStart])
+  @@index([identifier])
+  @@index([windowStart])
+}
+
+model SecurityEvent {
+  id              String    @id @default(cuid())
+  
+  eventType       String    // failed_login, suspicious_activity, rate_limit_exceeded
+  severity        String    // low, medium, high, critical
+  
+  identifier      String?   // IP, user ID, wallet address
+  description     String
+  metadata        Json?
+  
+  // Response taken
+  actionTaken     String?   // blocked, warned, none
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([eventType])
+  @@index([severity])
+  @@index([identifier])
+  @@index([createdAt])
+}
+
+model BlockedEntity {
+  id              String    @id @default(cuid())
+  
+  type            String    // ip, wallet, email, domain
+  value           String
+  reason          String
+  blockedBy       String?
+  expiresAt       DateTime?
+  
+  isActive        Boolean   @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@unique([type, value])
+  @@index([type])
+  @@index([isActive])
+}
