@@ -147,7 +147,7 @@ class LoggingService {
     requestId?: string
   ): Promise<void> {
     const level = statusCode >= 500 ? 'ERROR' : statusCode >= 400 ? 'WARN' : 'INFO';
-    
+
     await this.log({
       level,
       category: 'SYSTEM',
@@ -180,7 +180,7 @@ class SecurityEventService {
           severity: input.severity,
           identifier: input.identifier,
           description: input.description,
-          metadata: input.metadata || undefined,
+          metadata: (input.metadata ?? undefined) as any,
           actionTaken: input.actionTaken,
         },
       });
